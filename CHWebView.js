@@ -3,38 +3,16 @@ import { AppState } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useCrowdHandler } from './CrowdHandlerProvider';
 import {
-   
     StyleSheet,
     StatusBar,
-   
 } from 'react-native';
 
 export const CHWebView = ({ navigation, route }) => {
 
     const appState = useRef(AppState.currentState);
     const [appStateVisible, setAppStateVisible] = useState(appState.current);
-    const isMounted = useRef(false);
     const uri = route.params.uri;
     const crowdhandler_gatekeeper = useCrowdHandler();
-
-    /**
-     * Only load the webview when this screen is mounted
-     */
-    useEffect(() => {
-        const webViewMounted = () => {
-
-            console.log('mounting webview');
-            isMounted.current = true;
-        };
-        webViewMounted();
-
-        return () => {
-            console.log('Unmounting webview');
-            isMounted.current = false;
-        };
-
-    }, []);
-
 
     useEffect(() => {
         const subscription = AppState.addEventListener('change', nextAppState => {
@@ -67,31 +45,6 @@ const styles = StyleSheet.create({
         paddingTop: 20,
         alignItems: 'center',
         marginTop: StatusBar.currentHeight || 0,
-        backgroundColor: '#1B182E',
-    },
-    button: {
-        alignItems: 'center',
-        alignSelf: 'stretch',
-        // backgroundColor: '#1B182E',
-        borderBottomColor: '#fff',
-        borderBottomWidth: 1,
-        paddingRight: 16,
-        marginBottom: 0
-    },
-    buttonText : {
-      textAlign: 'center',  
-      fontSize: 16,
-      color: '#fff',
-      fontWeight: 700
-    },
-    title: {
-        fontSize: 16,
-    },
-    productImage: {
-        width: 100,
-        height: 100,
-        marginRight: 20,
-        borderRadius: 0
     },
 });
 
