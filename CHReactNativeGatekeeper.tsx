@@ -26,10 +26,12 @@ export default class CHReactNativeGatekeeper {
     navigation: null,
   };
   screen_config: any;
+  timeout: number;
 
-  constructor(config: { CH_KEY: string }, events: CHEvents, debug: boolean) {
+  constructor(config: { CH_KEY: string }, events: CHEvents, timeout: number, debug: boolean) {
     this.CH_KEY = config.CH_KEY;
-    this.debug = debug;
+    this.debug = debug || false;
+    this.timeout = timeout || 3000; // default timeout setting of 3 seconds
     this.events = {
       ...this.events,
       ...events,
@@ -44,7 +46,6 @@ export default class CHReactNativeGatekeeper {
    * @returns Promise
    */
   redirectOrWait(config: { slug: string }) {
-
     if (!config.slug) {
 
       this.on({
@@ -76,6 +77,27 @@ export default class CHReactNativeGatekeeper {
     this.events.navigation = navigation;
   }
 
+  async fetchWithTimeout (resource: string, options: RequestInit) {
+    
+    try {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), this.timeout);
+  
+      const response = await fetch(resource, {
+        ...options,
+        signal: controller.signal  
+      });      
+  
+      
+      clearTimeout(id);
+      
+      return response;
+    } catch (error) {
+      return error;
+    }
+
+}
+
   /**
    * 
    * @param url 
@@ -92,13 +114,24 @@ export default class CHReactNativeGatekeeper {
   ): Promise<CHResponse> {
     // Inside, we call the `fetch` function with 
     // a URL and config given:
-    return fetch(url, config)
-      .then(async (response) => {
-        return {
-          headers: response.headers,
-          status: response.status,
-          url: response.url,
-        } as CHResponse;
+
+    return this.fetchWithTimeout(url, config)
+      .then(async (response) => {        
+
+        if(response.headers) {
+          return {
+            headers: response.headers,
+            status: response.status,
+            url: response.url,
+          } as CHResponse;
+        } else {
+          return {
+            headers: undefined,
+            status: 504,
+            url: undefined,
+          } as CHResponse;
+        }
+
       })
   }
 
@@ -115,15 +148,20 @@ export default class CHReactNativeGatekeeper {
     try {
       const response = await this.request<CHResponse>(URL, {
         method: 'GET'
-      });
+      });      
 
-      const token = this.getToken(response.url);
+      let token: string;
+      if(response && response.url) {
+        token = this.getToken(response.url);
+        
+        if (token) {
+          this.saveToken(this.screen_config.slug, token);
+        }
 
-      if (token) {
-        this.saveToken(this.screen_config.slug, token);
       }
 
-      if (response.status === 200) {
+
+      if (response && response.status === 200) {
 
         this.on({
           type: 'onWait',
@@ -153,7 +191,7 @@ export default class CHReactNativeGatekeeper {
 
       this.on({ type: 'onRequestEnd' })
 
-    } catch (error) {
+    } catch (error) {      
 
       this.on({
         type: 'onRedirect',
