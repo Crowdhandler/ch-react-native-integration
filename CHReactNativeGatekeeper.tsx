@@ -83,23 +83,23 @@ export default class CHReactNativeGatekeeper {
     this.events.navigation = navigation;
   }
 
-  async fetchWithTimeout (resource: string, options: RequestInit) {
-    
+  async fetchWithTimeout(resource: string, options: RequestInit) {
+
     try {
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), this.timeout);
       const response = await fetch(resource, {
         ...options,
-        signal: controller.signal  
-      });      
+        signal: controller.signal
+      });
       clearTimeout(id);
-      
+
       return response;
     } catch (error) {
       return error;
     }
 
-}
+  }
 
   /**
    * 
@@ -119,9 +119,8 @@ export default class CHReactNativeGatekeeper {
     // a URL and config given:
 
     return this.fetchWithTimeout(url, config)
-      .then(async (response) => {        
-
-        if(response.headers) {
+      .then(async (response) => {
+        if (response.headers) {
           return {
             headers: response.headers,
             status: response.status,
@@ -138,38 +137,57 @@ export default class CHReactNativeGatekeeper {
       })
   }
 
+  buildRequestURL() : string {
+    let URL: string;
+    let saved_token :undefined;
+
+    let params: any = [ { name: 'ch-public-key', value: this.CH_KEY } ];
+
+    if (this.requestType === 'slug') {
+      params.push({ name: 'slug', value: this.screen_config.slug });
+      if (this.tokens[this.screen_config.slug]) {
+        saved_token = this.tokens[this.screen_config.slug];
+      }
+    } else {
+      params.push({ name: 'url', value:  encodeURI(this.screen_config.url) });
+      if (this.tokens[encodeURI(this.screen_config.url)]) {
+        saved_token = this.tokens[encodeURI(this.screen_config.url)]
+      }
+    }
+
+    if (!saved_token){
+      URL = API_REDIRECT_ENDPOINT;
+    } else {
+      URL = `${API_REDIRECT_ENDPOINT}${saved_token}`;
+    }
+
+    URL = `${URL}?${params.map((param) => {
+      return `${param.name}=${param.value}`
+    }).join('&')}`
+
+    return URL;
+  }
+
   /**
    * 
    */
   async makeCrowdHandlerRequest() {
     this.on({ type: 'onRequestStart' })
-    let URL: string = `${API_REDIRECT_ENDPOINT}?ch-public-key=${this.CH_KEY}`;
-
-    if(this.requestType === 'slug') {
-      URL = `${URL}&slug=${this.screen_config.slug}`;
-      if (this.tokens[this.screen_config.slug]) {
-        URL = `${API_REDIRECT_ENDPOINT}${this.tokens[this.screen_config.slug]}?ch-public-key=${this.CH_KEY}&slug=${this.screen_config.slug}`;
-      }
-    } else {
-      URL = `${URL}&url=${this.screen_config.url}`;
-      if (this.tokens[this.screen_config.url]) {
-        URL = `${API_REDIRECT_ENDPOINT}${this.tokens[this.screen_config.url]}?ch-public-key=${this.CH_KEY}&url=${this.screen_config.url}`;
-      }
-    }    
-
+    const URL : string = this.buildRequestURL();
+    
     try {
       const response = await this.request<CHResponse>(URL, {
         method: 'GET'
-      });      
+      });
 
       let token: any;
-      if(response && response.url) {
+      if (response && response.url) {
         token = this.getToken(response.url);
       }
 
       if (token) {
         this.saveToken((this.requestType === 'slug') ? this.screen_config.slug : encodeURI(this.screen_config.url), token);
-      }      
+      }
 
       if (response && response.status === 200) {
 
@@ -201,7 +219,7 @@ export default class CHReactNativeGatekeeper {
 
       this.on({ type: 'onRequestEnd' })
 
-    } catch (error) {      
+    } catch (error) {
 
       this.on({
         type: 'onRedirect',
@@ -255,7 +273,7 @@ export default class CHReactNativeGatekeeper {
 
     } catch (error) {
       console.log(error);
-      
+
     }
 
     return token;
@@ -267,23 +285,23 @@ export default class CHReactNativeGatekeeper {
 
   }
 
-  handlePostMessage(message: string) {
+  handlePostMessage(message: string) {    
     let parts = message.split('=');
 
     try {
-      let payload = JSON.parse(parts[1]);
-  
+      let payload = JSON.parse(parts[1]);      
+
       switch (parts[0]) {
         case 'saveToken':
-  
+
           if (this.requestType === 'slug') {
             this.saveToken(payload.slug, payload.token)
           }
-  
+
           if (this.requestType === 'url') {
             this.saveToken(encodeURI(payload.requestURL), payload.token)
           }
-          
+
           break;
         case 'promoted':
           this.on({
@@ -296,14 +314,14 @@ export default class CHReactNativeGatekeeper {
             }
           });
           break;
-  
+
         default:
           break;
       }
-      
+
     } catch (error) {
       console.log(error);
-      
+
     }
   }
 }
