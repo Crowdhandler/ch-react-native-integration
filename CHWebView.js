@@ -13,23 +13,20 @@ export const CHWebView = ({ navigation, route }) => {
 
     const appState = useRef(AppState.currentState);
     const [appStateVisible, setAppStateVisible] = useState(appState.current);
-    const isMounted = useRef(false);
+    const isMounted = useRef(true);
     const uri = route.params.uri;
     const crowdhandler_gatekeeper = useCrowdHandler();
-
+    const ref = useRef();
     /**
      * Only load the webview when this screen is mounted
      */
     useEffect(() => {
         const webViewMounted = () => {
-
-            console.log('mounting webview');
             isMounted.current = true;
         };
         webViewMounted();
 
         return () => {
-            console.log('Unmounting webview');
             isMounted.current = false;
         };
 
@@ -47,8 +44,9 @@ export const CHWebView = ({ navigation, route }) => {
     }, []);
 
     return (
-        (appStateVisible == 'active') ?
+        (appStateVisible == 'active' && isMounted.current) ?
         <WebView style={styles.container}
+            ref={(instance) => (ref.current = instance)}
             onMessage={(event) => {
                 crowdhandler_gatekeeper.handlePostMessage(event.nativeEvent.data);
             }}

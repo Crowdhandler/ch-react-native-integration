@@ -11,7 +11,7 @@ type CHEvents = {
   onRequestEnd: any,
   navigation: any,
 }
-const API_REDIRECT_ENDPOINT = "http://api.crowdhandler.com/v1/redirect/requests/";
+const API_REDIRECT_ENDPOINT = "https://api-dev.crowdhandler.com/v1/redirect/requests/";
 
 export default class CHReactNativeGatekeeper {
 
@@ -26,10 +26,13 @@ export default class CHReactNativeGatekeeper {
     navigation: null,
   };
   screen_config: any;
+  timeout: number;
+  requestType: string;
 
-  constructor(config: { CH_KEY: string }, events: CHEvents, debug: boolean) {
+  constructor(config: { CH_KEY: string }, events: CHEvents, timeout: number, debug: boolean) {
     this.CH_KEY = config.CH_KEY;
-    this.debug = debug;
+    this.debug = debug || false;
+    this.timeout = timeout || 5000;
     this.events = {
       ...this.events,
       ...events,
@@ -43,9 +46,8 @@ export default class CHReactNativeGatekeeper {
    * @param config 
    * @returns Promise
    */
-  redirectOrWait(config: { slug: string }) {
-
-    if (!config.slug) {
+  redirectOrWait(config: { slug: string, url: string }) {
+    if (!config.slug && !config.url) {
 
       this.on({
         type: 'onRedirect',
@@ -58,6 +60,11 @@ export default class CHReactNativeGatekeeper {
 
 
     } else {
+
+      this.requestType = 'slug';
+      if (config.url) {
+        this.requestType = 'url';
+      }
 
       this.screen_config = config;
       this.makeCrowdHandlerRequest();
@@ -76,6 +83,25 @@ export default class CHReactNativeGatekeeper {
     this.events.navigation = navigation;
   }
 
+  async fetchWithTimeout (resource: string, options: RequestInit) {
+    
+    try {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), this.timeout);
+      const response = await fetch(resource, {
+        ...options,
+        signal: controller.signal  
+      });      
+      clearTimeout(id);
+      
+      return response;
+    } catch (error) {
+      return error;
+    }
+
+}
+
+
   /**
    * 
    * @param url 
@@ -92,13 +118,24 @@ export default class CHReactNativeGatekeeper {
   ): Promise<CHResponse> {
     // Inside, we call the `fetch` function with 
     // a URL and config given:
-    return fetch(url, config)
-      .then(async (response) => {
-        return {
-          headers: response.headers,
-          status: response.status,
-          url: response.url,
-        } as CHResponse;
+
+    return this.fetchWithTimeout(url, config)
+      .then((response) => {        
+
+        if(response.headers) {
+          return {
+            headers: response.headers,
+            status: response.status,
+            url: response.url,
+          } as CHResponse;
+        } else {
+          return {
+            headers: undefined,
+            status: 504,
+            url: undefined,
+          } as CHResponse;
+        }
+
       })
   }
 
@@ -107,23 +144,38 @@ export default class CHReactNativeGatekeeper {
    */
   async makeCrowdHandlerRequest() {
     this.on({ type: 'onRequestStart' })
-    let URL = `${API_REDIRECT_ENDPOINT}?ch-public-key=${this.CH_KEY}&slug=${this.screen_config.slug}`;
-    if (this.tokens[this.screen_config.slug]) {
-      URL = `${API_REDIRECT_ENDPOINT}${this.tokens[this.screen_config.slug]}?ch-public-key=${this.CH_KEY}&slug=${this.screen_config.slug}`;
+    let URL: string = `${API_REDIRECT_ENDPOINT}?ch-public-key=${this.CH_KEY}`;
+
+    if(this.requestType === 'slug') {
+      URL = `${URL}&slug=${this.screen_config.slug}`;
+      if (this.tokens[this.screen_config.slug]) {
+        URL = `${API_REDIRECT_ENDPOINT}${this.tokens[this.screen_config.slug]}?ch-public-key=${this.CH_KEY}&slug=${this.screen_config.slug}`;
+      }
+    } else {
+      URL = `${URL}&url=${this.screen_config.url}`;
+      if (this.tokens[this.screen_config.url]) {
+        URL = `${API_REDIRECT_ENDPOINT}${this.tokens[this.screen_config.url]}?ch-public-key=${this.CH_KEY}&url=${this.screen_config.url}`;
+      }
     }
+
+    console.log(URL);
+    
 
     try {
       const response = await this.request<CHResponse>(URL, {
         method: 'GET'
-      });
+      });      
 
-      const token = this.getToken(response.url);
-
-      if (token) {
-        this.saveToken(this.screen_config.slug, token);
+      let token: any;
+      if(response && response.url) {
+        token = this.getToken(response.url);
       }
 
-      if (response.status === 200) {
+      if (token) {
+        this.saveToken((this.requestType === 'slug') ? this.screen_config.slug : encodeURI(this.screen_config.url), token);
+      }      
+
+      if (response && response.status === 200) {
 
         this.on({
           type: 'onWait',
@@ -221,26 +273,41 @@ export default class CHReactNativeGatekeeper {
 
   handlePostMessage(message: string) {
     let parts = message.split('=');
-    let payload = JSON.parse(parts[1]);
 
-    switch (parts[0]) {
-      case 'saveToken':
-        this.saveToken(payload.slug, payload.token)
-        break;
-      case 'promoted':
-        this.on({
-          type: 'onRedirect',
-          payload: {
-            screen_config: this.screen_config,
-            navigation: this.events.navigation,
-            referer: 'waiting_room',
-            status: 200
+    try {
+      let payload = JSON.parse(parts[1]);
+  
+      switch (parts[0]) {
+        case 'saveToken':
+  
+          if (this.requestType === 'slug') {
+            this.saveToken(payload.slug, payload.token)
           }
-        });
-        break;
-
-      default:
-        break;
+  
+          if (this.requestType === 'url') {
+            this.saveToken(encodeURI(payload.requestURL), payload.token)
+          }
+          
+          break;
+        case 'promoted':
+          this.on({
+            type: 'onRedirect',
+            payload: {
+              screen_config: this.screen_config,
+              navigation: this.events.navigation,
+              referer: 'waiting_room',
+              status: 200
+            }
+          });
+          break;
+  
+        default:
+          break;
+      }
+      
+    } catch (error) {
+      console.log(error);
+      
     }
   }
 }
