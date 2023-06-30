@@ -32,7 +32,7 @@ export default class CHReactNativeGatekeeper {
   constructor(config: { CH_KEY: string }, events: CHEvents, timeout: number, debug: boolean) {
     this.CH_KEY = config.CH_KEY;
     this.debug = debug || false;
-    this.timeout = timeout || 5000;
+    this.timeout = timeout || 3000; // default timeout setting of 3 seconds
     this.events = {
       ...this.events,
       ...events,
@@ -101,7 +101,6 @@ export default class CHReactNativeGatekeeper {
 
 }
 
-
   /**
    * 
    * @param url 
@@ -120,7 +119,7 @@ export default class CHReactNativeGatekeeper {
     // a URL and config given:
 
     return this.fetchWithTimeout(url, config)
-      .then((response) => {        
+      .then(async (response) => {        
 
         if(response.headers) {
           return {
@@ -156,10 +155,7 @@ export default class CHReactNativeGatekeeper {
       if (this.tokens[this.screen_config.url]) {
         URL = `${API_REDIRECT_ENDPOINT}${this.tokens[this.screen_config.url]}?ch-public-key=${this.CH_KEY}&url=${this.screen_config.url}`;
       }
-    }
-
-    console.log(URL);
-    
+    }    
 
     try {
       const response = await this.request<CHResponse>(URL, {
@@ -205,7 +201,7 @@ export default class CHReactNativeGatekeeper {
 
       this.on({ type: 'onRequestEnd' })
 
-    } catch (error) {
+    } catch (error) {      
 
       this.on({
         type: 'onRedirect',
