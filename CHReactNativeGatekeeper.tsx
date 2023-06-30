@@ -11,7 +11,7 @@ type CHEvents = {
   onRequestEnd: any,
   navigation: any,
 }
-const API_REDIRECT_ENDPOINT = "https://api-dev.crowdhandler.com/v1/redirect/requests/";
+const API_REDIRECT_ENDPOINT = "https://api.crowdhandler.com/v1/redirect/requests/";
 
 export default class CHReactNativeGatekeeper {
 
